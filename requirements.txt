@@ -14,8 +14,6 @@ python-dotenv
 streamlit
 plotly
 requests
-deepface
-grad-cam
 fpdf2
 scikit-learn
 efficientnet-pytorch
