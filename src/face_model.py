@@ -14,15 +14,24 @@ transform = transforms.Compose([
 def load_model():
     model = models.efficientnet_b0(weights='DEFAULT')
     model.classifier[1] = nn.Linear(model.classifier[1].in_features, 2)
-    
+
     model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models', 'verishield_face_model.pth')
-    
+
     if os.path.exists(model_path):
-        model.load_state_dict(torch.load(model_path, map_location='cpu'))
-        print(f"✅ Loaded trained face model from {model_path}")
+        checkpoint = torch.load(model_path, map_location='cpu')
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            model.load_state_dict(checkpoint['model_state_dict'])
+            val_acc = checkpoint.get('val_acc', 0)
+            fake_acc = checkpoint.get('fake_acc', 0)
+            real_acc = checkpoint.get('real_acc', 0)
+            print(f"✅ Loaded trained face model")
+            print(f"   Val Acc: {val_acc:.2f}% | Fake Detection: {fake_acc:.2f}% | Real Detection: {real_acc:.2f}%")
+        else:
+            model.load_state_dict(checkpoint)
+            print(f"✅ Loaded trained face model from {model_path}")
     else:
         print("⚠️ Trained model not found, using pretrained weights")
-    
+
     model.eval()
     return model
 
@@ -42,7 +51,7 @@ def predict_face(image: Image.Image) -> dict:
         with torch.no_grad():
             outputs = model(tensor)
             probs = torch.softmax(outputs, dim=1)
-            # Classes are ['fake', 'real'] so index 0 = fake, index 1 = real
+            # Classes: 0=fake, 1=real
             fake_prob = float(probs[0][0])
             real_prob = float(probs[0][1])
 
@@ -50,16 +59,16 @@ def predict_face(image: Image.Image) -> dict:
         texture_score = detect_texture_artifacts(img_array)
         frequency_score = detect_frequency_artifacts(img_array)
 
-        # Use model output directly
+        # Use model output directly — trained model is reliable
         combined_score = fake_prob
         combined_score = min(max(combined_score, 0.0), 1.0)
 
         liveness_score = round(1.0 - combined_score, 4)
 
-        if combined_score > 0.7:
+        if combined_score > 0.65:
             result = "DEEPFAKE"
             alert_level = "CRITICAL" if combined_score > 0.85 else "HIGH RISK"
-        elif combined_score > 0.55:
+        elif combined_score > 0.45:
             result = "SUSPICIOUS"
             alert_level = "MEDIUM RISK"
         else:
