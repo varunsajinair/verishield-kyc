@@ -28,31 +28,21 @@ def get_model():
     return _model
 
 def error_level_analysis(image: Image.Image) -> float:
-    """
-    Error Level Analysis (ELA) — industry standard forensic technique.
-    Detects regions with different compression history = tampered areas.
-    Used by forensic experts and commercial KYC systems worldwide.
-    """
-    # Save at specific quality
     buffer = io.BytesIO()
     image.save(buffer, format='JPEG', quality=90)
     buffer.seek(0)
     compressed = Image.open(buffer).copy()
     buffer.close()
 
-    # Calculate difference
     ela_image = ImageChops.difference(image.convert('RGB'), compressed.convert('RGB'))
     ela_array = np.array(ela_image).astype(np.float32)
-
-    # Amplify differences
     ela_array = ela_array * 10
     ela_array = np.clip(ela_array, 0, 255)
 
-    # Split image into regions and check consistency
     h, w = ela_array.shape[:2]
     region_size = h // 4
-
     region_stds = []
+
     for i in range(4):
         for j in range(4):
             region = ela_array[
@@ -61,14 +51,9 @@ def error_level_analysis(image: Image.Image) -> float:
             ]
             region_stds.append(np.std(region))
 
-    # High variance between regions = inconsistent compression = tampering
     overall_std = np.std(region_stds)
-    max_std = max(region_stds)
     mean_std = np.mean(region_stds)
 
-    # Normalize ELA score
-    # Authentic documents have consistent ELA levels
-    # Tampered documents have regions with much higher ELA
     if mean_std > 0:
         inconsistency = overall_std / mean_std
     else:
@@ -78,35 +63,27 @@ def error_level_analysis(image: Image.Image) -> float:
     return float(ela_score)
 
 def detect_copy_move(img_array: np.ndarray) -> float:
-    """
-    Copy-move forgery detection using SIFT feature matching.
-    Detects if parts of the document were copied and pasted.
-    """
     try:
         gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
-
-        # Use ORB (faster than SIFT, no patent issues)
         orb = cv2.ORB_create(nfeatures=500)
         keypoints, descriptors = orb.detectAndCompute(gray, None)
 
         if descriptors is None or len(keypoints) < 10:
             return 0.0
 
-        # Match features within same image
         bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
         matches = bf.knnMatch(descriptors, descriptors, k=3)
 
-        # Find suspicious matches (same region matched to different region)
         suspicious = 0
         total = 0
         for match_group in matches:
             if len(match_group) >= 2:
                 m, n = match_group[0], match_group[1]
-                if m.trainIdx != m.queryIdx:  # Not self-match
+                if m.trainIdx != m.queryIdx:
                     pt1 = keypoints[m.queryIdx].pt
                     pt2 = keypoints[m.trainIdx].pt
                     dist = np.sqrt((pt1[0]-pt2[0])**2 + (pt1[1]-pt2[1])**2)
-                    if dist > 20:  # Points far apart but similar
+                    if dist > 20:
                         if m.distance < 0.8 * n.distance:
                             suspicious += 1
                 total += 1
@@ -122,18 +99,10 @@ def detect_copy_move(img_array: np.ndarray) -> float:
         return 0.0
 
 def detect_noise_inconsistency(img_array: np.ndarray) -> float:
-    """
-    Detect noise inconsistency between regions.
-    Authentic documents have uniform noise from single scan/photo.
-    Tampered documents have regions with different noise patterns.
-    """
     gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY).astype(np.float32)
-
-    # Extract noise map
     blur = cv2.GaussianBlur(gray, (3, 3), 0)
     noise = gray - blur
 
-    # Divide into blocks and measure noise statistics
     h, w = noise.shape
     block_size = h // 6
     block_stds = []
@@ -150,17 +119,11 @@ def detect_noise_inconsistency(img_array: np.ndarray) -> float:
     if len(block_stds) == 0:
         return 0.0
 
-    # High variance in noise levels = tampering
     noise_variance = np.std(block_stds) / (np.mean(block_stds) + 1e-6)
     noise_score = min(noise_variance / 2.0, 1.0)
-
     return float(noise_score)
 
 def detect_jpeg_ghost(image: Image.Image) -> float:
-    """
-    JPEG Ghost detection — finds regions saved at different quality levels.
-    Pasted content has different JPEG compression artifacts.
-    """
     try:
         original = np.array(image.convert('L')).astype(np.float32)
         ghost_scores = []
@@ -173,11 +136,10 @@ def detect_jpeg_ghost(image: Image.Image) -> float:
             buffer.close()
 
             diff = np.abs(original - compressed)
-
-            # Check regional consistency
             h, w = diff.shape
             region_means = []
             rs = h // 4
+
             for i in range(4):
                 for j in range(4):
                     region = diff[i*rs:(i+1)*rs, j*rs:(j+1)*rs]
@@ -194,16 +156,9 @@ def detect_jpeg_ghost(image: Image.Image) -> float:
         return 0.0
 
 def check_image_quality(image: Image.Image) -> float:
-    """
-    Check image quality consistency.
-    Forged documents often have blur/sharpness inconsistencies.
-    """
     img_array = np.array(image.convert('L'))
-
-    # Laplacian variance = sharpness measure
     laplacian = cv2.Laplacian(img_array, cv2.CV_64F)
 
-    # Check sharpness in different regions
     h, w = laplacian.shape
     rs = h // 4
     region_vars = []
@@ -217,36 +172,89 @@ def check_image_quality(image: Image.Image) -> float:
     if not region_vars:
         return 0.0
 
-    # High variance between region sharpness = inconsistency = forgery
     sharpness_inconsistency = np.std(region_vars) / (np.mean(region_vars) + 1e-6)
     quality_score = min(sharpness_inconsistency / 5.0, 1.0)
-
     return float(quality_score)
+
+def check_metadata_tampering(image: Image.Image) -> float:
+    """Check EXIF metadata for editing software signatures"""
+    try:
+        exif_data = image._getexif()
+        if exif_data is None:
+            # No EXIF = likely edited/screenshot = suspicious
+            return 0.4
+
+        # Check for editing software in EXIF
+        software_tag = 305
+        if software_tag in exif_data:
+            software = str(exif_data[software_tag]).lower()
+            suspicious_software = ['photoshop', 'gimp', 'paint', 'pixlr',
+                                  'canva', 'snapseed', 'lightroom', 'affinity']
+            if any(s in software for s in suspicious_software):
+                return 0.8
+        return 0.1
+    except:
+        return 0.3
+
+def detect_color_inconsistency(img_array: np.ndarray) -> float:
+    """
+    Detect color space inconsistencies.
+    Pasted regions often have different color statistics.
+    """
+    try:
+        # Split into RGB channels
+        r, g, b = img_array[:,:,0], img_array[:,:,1], img_array[:,:,2]
+
+        h, w = r.shape
+        block_size = h // 4
+        block_ratios = []
+
+        for i in range(4):
+            for j in range(4):
+                br = r[i*block_size:(i+1)*block_size, j*block_size:(j+1)*block_size]
+                bg = g[i*block_size:(i+1)*block_size, j*block_size:(j+1)*block_size]
+                bb = b[i*block_size:(i+1)*block_size, j*block_size:(j+1)*block_size]
+
+                if br.size > 0 and np.mean(bg) > 0:
+                    rg_ratio = np.mean(br) / (np.mean(bg) + 1e-6)
+                    block_ratios.append(rg_ratio)
+
+        if len(block_ratios) < 2:
+            return 0.0
+
+        color_inconsistency = np.std(block_ratios) / (np.mean(block_ratios) + 1e-6)
+        color_score = min(color_inconsistency / 0.5, 1.0)
+        return float(color_score)
+
+    except Exception:
+        return 0.0
 
 def predict_document(image: Image.Image) -> dict:
     try:
-        # Resize for processing
         image_resized = image.resize((512, 512))
         img_array = np.array(image_resized.convert('RGB'))
 
-        # Run all forensic checks
+        # Run all 6 forensic checks
         ela_score = error_level_analysis(image_resized)
         copy_move_score = detect_copy_move(img_array)
         noise_score = detect_noise_inconsistency(img_array)
         jpeg_ghost_score = detect_jpeg_ghost(image_resized)
         quality_score = check_image_quality(image_resized)
+        metadata_score = check_metadata_tampering(image)
+        color_score = detect_color_inconsistency(img_array)
 
-        # Weighted ensemble — ELA is most reliable
+        # Weighted ensemble
         combined_score = (
-            ela_score * 0.35 +
-            noise_score * 0.25 +
-            jpeg_ghost_score * 0.20 +
+            ela_score * 0.25 +
+            noise_score * 0.20 +
+            jpeg_ghost_score * 0.15 +
+            metadata_score * 0.15 +
+            color_score * 0.10 +
             copy_move_score * 0.10 +
-            quality_score * 0.10
+            quality_score * 0.05
         )
         combined_score = min(max(combined_score, 0.0), 1.0)
 
-        # Determine result
         if combined_score > 0.55:
             result = "FORGED"
             alert_level = "CRITICAL" if combined_score > 0.75 else "HIGH RISK"
@@ -257,18 +265,19 @@ def predict_document(image: Image.Image) -> dict:
             result = "AUTHENTIC"
             alert_level = "LOW RISK"
 
-        # Build findings
         tampered_regions = []
         if ela_score > 0.4:
-            tampered_regions.append(f"ELA: Compression inconsistency detected ({ela_score:.0%})")
+            tampered_regions.append(f"ELA: Compression inconsistency ({ela_score:.0%})")
         if noise_score > 0.4:
-            tampered_regions.append(f"Noise: Regional noise inconsistency ({noise_score:.0%})")
+            tampered_regions.append(f"Noise: Regional inconsistency ({noise_score:.0%})")
         if jpeg_ghost_score > 0.4:
-            tampered_regions.append(f"JPEG Ghost: Multi-quality artifacts detected ({jpeg_ghost_score:.0%})")
+            tampered_regions.append(f"JPEG Ghost: Multi-quality artifacts ({jpeg_ghost_score:.0%})")
+        if metadata_score > 0.5:
+            tampered_regions.append(f"Metadata: Editing software detected ({metadata_score:.0%})")
+        if color_score > 0.4:
+            tampered_regions.append(f"Color: Inconsistency detected ({color_score:.0%})")
         if copy_move_score > 0.3:
-            tampered_regions.append(f"Copy-Move: Duplicated regions detected ({copy_move_score:.0%})")
-        if quality_score > 0.4:
-            tampered_regions.append(f"Quality: Sharpness inconsistency detected ({quality_score:.0%})")
+            tampered_regions.append(f"Copy-Move: Duplicated regions ({copy_move_score:.0%})")
         if not tampered_regions:
             tampered_regions.append("No tampering detected — document appears authentic")
 
@@ -284,7 +293,9 @@ def predict_document(image: Image.Image) -> dict:
             "noise_score": round(noise_score, 4),
             "jpeg_ghost_score": round(jpeg_ghost_score, 4),
             "copy_move_score": round(copy_move_score, 4),
-            "quality_score": round(quality_score, 4)
+            "quality_score": round(quality_score, 4),
+            "metadata_score": round(metadata_score, 4),
+            "color_score": round(color_score, 4)
         }
 
     except Exception as e:
@@ -301,5 +312,7 @@ def predict_document(image: Image.Image) -> dict:
             "noise_score": 0.0,
             "jpeg_ghost_score": 0.0,
             "copy_move_score": 0.0,
-            "quality_score": 0.0
+            "quality_score": 0.0,
+            "metadata_score": 0.0,
+            "color_score": 0.0
         }
