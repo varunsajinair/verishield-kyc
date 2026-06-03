@@ -1,301 +1,170 @@
-import torch
-import torch.nn as nn
-from torchvision import transforms, models
-from PIL import Image, ImageChops, ImageEnhance
+from PIL import Image
 import numpy as np
 import cv2
 import io
 import os
 
-transform = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-])
-
-def load_model():
-    model = models.efficientnet_b0(weights='DEFAULT')
-    model.classifier[1] = nn.Linear(model.classifier[1].in_features, 2)
-    model.eval()
-    return model
-
-_model = None
-
-def get_model():
-    global _model
-    if _model is None:
-        _model = load_model()
-    return _model
-
-def error_level_analysis(image: Image.Image) -> float:
-    buffer = io.BytesIO()
-    image.save(buffer, format='JPEG', quality=90)
-    buffer.seek(0)
-    compressed = Image.open(buffer).copy()
-    buffer.close()
-
-    ela_image = ImageChops.difference(image.convert('RGB'), compressed.convert('RGB'))
-    ela_array = np.array(ela_image).astype(np.float32)
-    ela_array = ela_array * 10
-    ela_array = np.clip(ela_array, 0, 255)
-
-    h, w = ela_array.shape[:2]
-    region_size = h // 4
-    region_stds = []
-
-    for i in range(4):
-        for j in range(4):
-            region = ela_array[
-                i*region_size:(i+1)*region_size,
-                j*region_size:(j+1)*region_size
-            ]
-            region_stds.append(np.std(region))
-
-    overall_std = np.std(region_stds)
-    mean_std = np.mean(region_stds)
-
-    if mean_std > 0:
-        inconsistency = overall_std / mean_std
-    else:
-        inconsistency = 0
-
-    ela_score = min(inconsistency / 3.0, 1.0)
-    return float(ela_score)
-
-def detect_copy_move(img_array: np.ndarray) -> float:
+def check_face_presence(img_array: np.ndarray) -> tuple:
+    """Check if document contains a face photo"""
     try:
         gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
-        orb = cv2.ORB_create(nfeatures=500)
-        keypoints, descriptors = orb.detectAndCompute(gray, None)
+        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        faces = face_cascade.detectMultiScale(gray, 1.1, 4)
+        return len(faces) > 0, len(faces)
+    except:
+        return False, 0
 
-        if descriptors is None or len(keypoints) < 10:
-            return 0.0
-
-        bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
-        matches = bf.knnMatch(descriptors, descriptors, k=3)
-
-        suspicious = 0
-        total = 0
-        for match_group in matches:
-            if len(match_group) >= 2:
-                m, n = match_group[0], match_group[1]
-                if m.trainIdx != m.queryIdx:
-                    pt1 = keypoints[m.queryIdx].pt
-                    pt2 = keypoints[m.trainIdx].pt
-                    dist = np.sqrt((pt1[0]-pt2[0])**2 + (pt1[1]-pt2[1])**2)
-                    if dist > 20:
-                        if m.distance < 0.8 * n.distance:
-                            suspicious += 1
-                total += 1
-
-        if total > 0:
-            copy_move_score = min(suspicious / (total * 0.1), 1.0)
-        else:
-            copy_move_score = 0.0
-
-        return float(copy_move_score)
-
-    except Exception:
-        return 0.0
-
-def detect_noise_inconsistency(img_array: np.ndarray) -> float:
-    gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY).astype(np.float32)
-    blur = cv2.GaussianBlur(gray, (3, 3), 0)
-    noise = gray - blur
-
-    h, w = noise.shape
-    block_size = h // 6
-    block_stds = []
-
-    for i in range(6):
-        for j in range(6):
-            block = noise[
-                i*block_size:(i+1)*block_size,
-                j*block_size:(j+1)*block_size
-            ]
-            if block.size > 0:
-                block_stds.append(np.std(block))
-
-    if len(block_stds) == 0:
-        return 0.0
-
-    noise_variance = np.std(block_stds) / (np.mean(block_stds) + 1e-6)
-    noise_score = min(noise_variance / 2.0, 1.0)
-    return float(noise_score)
-
-def detect_jpeg_ghost(image: Image.Image) -> float:
-    try:
-        original = np.array(image.convert('L')).astype(np.float32)
-        ghost_scores = []
-
-        for quality in [50, 70, 85]:
-            buffer = io.BytesIO()
-            image.save(buffer, format='JPEG', quality=quality)
-            buffer.seek(0)
-            compressed = np.array(Image.open(buffer).convert('L')).astype(np.float32)
-            buffer.close()
-
-            diff = np.abs(original - compressed)
-            h, w = diff.shape
-            region_means = []
-            rs = h // 4
-
-            for i in range(4):
-                for j in range(4):
-                    region = diff[i*rs:(i+1)*rs, j*rs:(j+1)*rs]
-                    if region.size > 0:
-                        region_means.append(np.mean(region))
-
-            if region_means:
-                ghost_score = np.std(region_means) / (np.mean(region_means) + 1e-6)
-                ghost_scores.append(min(ghost_score / 2.0, 1.0))
-
-        return float(np.mean(ghost_scores)) if ghost_scores else 0.0
-
-    except Exception:
-        return 0.0
-
-def check_image_quality(image: Image.Image) -> float:
-    img_array = np.array(image.convert('L'))
-    laplacian = cv2.Laplacian(img_array, cv2.CV_64F)
-
-    h, w = laplacian.shape
-    rs = h // 4
-    region_vars = []
-
-    for i in range(4):
-        for j in range(4):
-            region = laplacian[i*rs:(i+1)*rs, j*rs:(j+1)*rs]
-            if region.size > 0:
-                region_vars.append(np.var(region))
-
-    if not region_vars:
-        return 0.0
-
-    sharpness_inconsistency = np.std(region_vars) / (np.mean(region_vars) + 1e-6)
-    quality_score = min(sharpness_inconsistency / 5.0, 1.0)
+def check_image_quality(img_array: np.ndarray) -> float:
+    """Check if image is clear enough to be a valid document"""
+    gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+    laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
+    # Higher variance = sharper image
+    quality_score = min(laplacian_var / 500.0, 1.0)
     return float(quality_score)
 
-def check_metadata_tampering(image: Image.Image) -> float:
-    """Check EXIF metadata for editing software signatures"""
-    try:
-        exif_data = image._getexif()
-        if exif_data is None:
-            # No EXIF = likely edited/screenshot = suspicious
-            return 0.4
+def check_text_density(img_array: np.ndarray) -> float:
+    """Check if document has sufficient text regions"""
+    gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+    # Use edge detection to find text-like regions
+    edges = cv2.Canny(gray, 50, 150)
+    text_density = np.sum(edges > 0) / edges.size
+    return float(text_density)
 
-        # Check for editing software in EXIF
+def check_aspect_ratio(image: Image.Image) -> float:
+    """Check if image has valid ID document aspect ratio"""
+    w, h = image.size
+    ratio = w / h if h > 0 else 0
+
+    # Standard ID ratios: credit card 1.586, passport 0.707, driving license ~1.4
+    valid_ratios = [1.586, 0.707, 1.4, 1.0]
+    min_diff = min(abs(ratio - r) for r in valid_ratios)
+
+    # Score: closer to standard ratio = more likely a real document
+    ratio_score = max(0, 1.0 - min_diff / 1.0)
+    return float(ratio_score)
+
+def check_metadata(image: Image.Image) -> dict:
+    """Check image metadata for camera authenticity"""
+    try:
+        exif = image._getexif()
+        if exif is None:
+            return {'has_exif': False, 'is_camera': False}
+
+        # Camera make/model tags
+        make_tag = 271
+        model_tag = 272
         software_tag = 305
-        if software_tag in exif_data:
-            software = str(exif_data[software_tag]).lower()
-            suspicious_software = ['photoshop', 'gimp', 'paint', 'pixlr',
-                                  'canva', 'snapseed', 'lightroom', 'affinity']
-            if any(s in software for s in suspicious_software):
-                return 0.8
-        return 0.1
+
+        has_camera = make_tag in exif or model_tag in exif
+        software = str(exif.get(software_tag, '')).lower()
+        editing_software = ['photoshop', 'gimp', 'paint', 'pixlr', 'canva']
+        is_edited = any(s in software for s in editing_software)
+
+        return {
+            'has_exif': True,
+            'is_camera': has_camera,
+            'is_edited': is_edited
+        }
     except:
-        return 0.3
+        return {'has_exif': False, 'is_camera': False, 'is_edited': False}
 
-def detect_color_inconsistency(img_array: np.ndarray) -> float:
-    """
-    Detect color space inconsistencies.
-    Pasted regions often have different color statistics.
-    """
-    try:
-        # Split into RGB channels
-        r, g, b = img_array[:,:,0], img_array[:,:,1], img_array[:,:,2]
-
-        h, w = r.shape
-        block_size = h // 4
-        block_ratios = []
-
-        for i in range(4):
-            for j in range(4):
-                br = r[i*block_size:(i+1)*block_size, j*block_size:(j+1)*block_size]
-                bg = g[i*block_size:(i+1)*block_size, j*block_size:(j+1)*block_size]
-                bb = b[i*block_size:(i+1)*block_size, j*block_size:(j+1)*block_size]
-
-                if br.size > 0 and np.mean(bg) > 0:
-                    rg_ratio = np.mean(br) / (np.mean(bg) + 1e-6)
-                    block_ratios.append(rg_ratio)
-
-        if len(block_ratios) < 2:
-            return 0.0
-
-        color_inconsistency = np.std(block_ratios) / (np.mean(block_ratios) + 1e-6)
-        color_score = min(color_inconsistency / 0.5, 1.0)
-        return float(color_score)
-
-    except Exception:
-        return 0.0
+def check_resolution(image: Image.Image) -> float:
+    """Check if resolution is sufficient for a valid document"""
+    w, h = image.size
+    total_pixels = w * h
+    # Minimum 100K pixels for a readable document
+    resolution_score = min(total_pixels / 500000, 1.0)
+    return float(resolution_score)
 
 def predict_document(image: Image.Image) -> dict:
     try:
-        image_resized = image.resize((512, 512))
-        img_array = np.array(image_resized.convert('RGB'))
+        img_array = np.array(image.convert('RGB'))
+        img_resized = cv2.resize(img_array, (512, 512))
 
-        # Run all 6 forensic checks
-        ela_score = error_level_analysis(image_resized)
-        copy_move_score = detect_copy_move(img_array)
-        noise_score = detect_noise_inconsistency(img_array)
-        jpeg_ghost_score = detect_jpeg_ghost(image_resized)
-        quality_score = check_image_quality(image_resized)
-        metadata_score = check_metadata_tampering(image)
-        color_score = detect_color_inconsistency(img_array)
+        # Run all checks
+        has_face, face_count = check_face_presence(img_resized)
+        quality_score = check_image_quality(img_resized)
+        text_density = check_text_density(img_resized)
+        ratio_score = check_aspect_ratio(image)
+        metadata = check_metadata(image)
+        resolution_score = check_resolution(image)
 
-        # Weighted ensemble
-        combined_score = (
-            ela_score * 0.25 +
-            noise_score * 0.20 +
-            jpeg_ghost_score * 0.15 +
-            metadata_score * 0.15 +
-            color_score * 0.10 +
-            copy_move_score * 0.10 +
-            quality_score * 0.05
-        )
-        combined_score = min(max(combined_score, 0.0), 1.0)
+        # Build findings and risk score
+        findings = []
+        risk_score = 0.0
 
-        if combined_score > 0.55:
-            result = "FORGED"
-            alert_level = "CRITICAL" if combined_score > 0.75 else "HIGH RISK"
-        elif combined_score > 0.30:
+        # Quality check
+        if quality_score < 0.3:
+            findings.append(f"⚠️ Low image quality — document may be blurry ({quality_score:.0%})")
+            risk_score += 0.25
+        else:
+            findings.append(f"✅ Image quality acceptable ({quality_score:.0%})")
+
+        # Face check
+        if has_face:
+            findings.append(f"✅ Face photo detected ({face_count} face(s) found)")
+        else:
+            findings.append("⚠️ No face photo detected — may not be a valid ID document")
+            risk_score += 0.20
+
+        # Text density
+        if text_density > 0.05:
+            findings.append(f"✅ Text regions detected ({text_density:.0%} density)")
+        else:
+            findings.append("⚠️ Insufficient text — document may be invalid")
+            risk_score += 0.15
+
+        # Aspect ratio
+        if ratio_score > 0.5:
+            findings.append(f"✅ Aspect ratio matches standard ID format")
+        else:
+            findings.append("⚠️ Non-standard dimensions — may not be an ID document")
+            risk_score += 0.15
+
+        # Resolution
+        if resolution_score > 0.3:
+            findings.append(f"✅ Resolution sufficient for verification")
+        else:
+            findings.append("⚠️ Low resolution — document may be invalid")
+            risk_score += 0.10
+
+        # Metadata
+        if metadata.get('is_edited'):
+            findings.append("🚨 Editing software detected in metadata — document may be tampered")
+            risk_score += 0.40
+        elif metadata.get('is_camera'):
+            findings.append("✅ Camera metadata present — likely original photo")
+        elif not metadata.get('has_exif'):
+            findings.append("⚠️ No camera metadata — could be screenshot or digital copy")
+            risk_score += 0.15
+
+        risk_score = min(risk_score, 1.0)
+
+        # Determine result
+        if risk_score > 0.55:
+            result = "SUSPICIOUS"
+            alert_level = "HIGH RISK"
+        elif risk_score > 0.30:
             result = "SUSPICIOUS"
             alert_level = "MEDIUM RISK"
         else:
             result = "AUTHENTIC"
             alert_level = "LOW RISK"
 
-        tampered_regions = []
-        if ela_score > 0.4:
-            tampered_regions.append(f"ELA: Compression inconsistency ({ela_score:.0%})")
-        if noise_score > 0.4:
-            tampered_regions.append(f"Noise: Regional inconsistency ({noise_score:.0%})")
-        if jpeg_ghost_score > 0.4:
-            tampered_regions.append(f"JPEG Ghost: Multi-quality artifacts ({jpeg_ghost_score:.0%})")
-        if metadata_score > 0.5:
-            tampered_regions.append(f"Metadata: Editing software detected ({metadata_score:.0%})")
-        if color_score > 0.4:
-            tampered_regions.append(f"Color: Inconsistency detected ({color_score:.0%})")
-        if copy_move_score > 0.3:
-            tampered_regions.append(f"Copy-Move: Duplicated regions ({copy_move_score:.0%})")
-        if not tampered_regions:
-            tampered_regions.append("No tampering detected — document appears authentic")
-
         return {
             "result": result,
-            "confidence": round(combined_score, 4),
-            "forgery_probability": round(combined_score, 4),
-            "real_probability": round(1 - combined_score, 4),
-            "risk_score": round(combined_score, 4),
+            "confidence": round(1 - risk_score, 4),
+            "forgery_probability": round(risk_score, 4),
+            "real_probability": round(1 - risk_score, 4),
+            "risk_score": round(risk_score, 4),
             "alert_level": alert_level,
-            "tampered_regions": tampered_regions,
-            "ela_score": round(ela_score, 4),
-            "noise_score": round(noise_score, 4),
-            "jpeg_ghost_score": round(jpeg_ghost_score, 4),
-            "copy_move_score": round(copy_move_score, 4),
+            "tampered_regions": findings,
+            "face_detected": has_face,
+            "face_count": face_count,
             "quality_score": round(quality_score, 4),
-            "metadata_score": round(metadata_score, 4),
-            "color_score": round(color_score, 4)
+            "text_density": round(text_density, 4),
+            "ratio_score": round(ratio_score, 4),
+            "resolution_score": round(resolution_score, 4)
         }
 
     except Exception as e:
@@ -307,12 +176,11 @@ def predict_document(image: Image.Image) -> dict:
             "real_probability": 0.0,
             "risk_score": 0.0,
             "alert_level": "UNKNOWN",
-            "tampered_regions": ["Processing error"],
-            "ela_score": 0.0,
-            "noise_score": 0.0,
-            "jpeg_ghost_score": 0.0,
-            "copy_move_score": 0.0,
+            "tampered_regions": [f"Processing error: {str(e)}"],
+            "face_detected": False,
+            "face_count": 0,
             "quality_score": 0.0,
-            "metadata_score": 0.0,
-            "color_score": 0.0
+            "text_density": 0.0,
+            "ratio_score": 0.0,
+            "resolution_score": 0.0
         }
