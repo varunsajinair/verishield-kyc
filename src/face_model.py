@@ -59,16 +59,16 @@ def predict_face(image: Image.Image) -> dict:
         texture_score = detect_texture_artifacts(img_array)
         frequency_score = detect_frequency_artifacts(img_array)
 
-        # Use model output directly — trained model is reliable
+        # Use model output directly
         combined_score = fake_prob
         combined_score = min(max(combined_score, 0.0), 1.0)
 
         liveness_score = round(1.0 - combined_score, 4)
 
-        if combined_score > 0.65:
+        if combined_score > 0.5:
             result = "DEEPFAKE"
-            alert_level = "CRITICAL" if combined_score > 0.85 else "HIGH RISK"
-        elif combined_score > 0.45:
+            alert_level = "CRITICAL" if combined_score > 0.75 else "HIGH RISK"
+        elif combined_score > 0.25:
             result = "SUSPICIOUS"
             alert_level = "MEDIUM RISK"
         else:
