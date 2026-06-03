@@ -1,7 +1,6 @@
 .env
 __pycache__/
 *.pyc
-*.pth
 models/*.pkl
 models/*.pt
 .streamlit/secrets.toml
