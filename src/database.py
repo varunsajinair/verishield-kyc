@@ -5,12 +5,20 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def get_connection():
+    host = os.getenv('DB_HOST')
+    port = os.getenv('DB_PORT', 5432)
+    dbname = os.getenv('DB_NAME', 'postgres')
+    user = os.getenv('DB_USER', 'postgres')
+    password = os.getenv('DB_PASSWORD')
+    
+    print(f"🔌 Connecting to DB: {host}:{port}/{dbname} as {user}")
+    
     return psycopg2.connect(
-        host=os.getenv('DB_HOST'),
-        port=os.getenv('DB_PORT', 5432),
-        dbname=os.getenv('DB_NAME', 'postgres'),
-        user=os.getenv('DB_USER', 'postgres'),
-        password=os.getenv('DB_PASSWORD'),
+        host=host,
+        port=port,
+        dbname=dbname,
+        user=user,
+        password=password,
         sslmode='require'
     )
 
@@ -40,9 +48,12 @@ def log_verification(data: dict):
         conn.commit()
         cursor.close()
         conn.close()
-        print(f"✅ Logged verification: {data.get('verification_id')}")
+        print(f"✅ DB: Logged verification {data.get('verification_id')}")
     except Exception as e:
-        print(f"DB error: {e}")
+        print(f"❌ DB ERROR: {e}")
+        print(f"❌ DB_HOST: {os.getenv('DB_HOST')}")
+        print(f"❌ DB_USER: {os.getenv('DB_USER')}")
+        print(f"❌ DB_NAME: {os.getenv('DB_NAME')}")
 
 def load_all_verifications():
     try:
@@ -58,7 +69,7 @@ def load_all_verifications():
         conn.close()
         return rows, cols
     except Exception as e:
-        print(f"DB error: {e}")
+        print(f"❌ DB ERROR: {e}")
         return [], []
 
 def load_recent_verifications(limit=50):
@@ -76,5 +87,5 @@ def load_recent_verifications(limit=50):
         conn.close()
         return rows, cols
     except Exception as e:
-        print(f"DB error: {e}")
+        print(f"❌ DB ERROR: {e}")
         return [], []
