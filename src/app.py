@@ -98,38 +98,40 @@ async def kyc_complete(
     match_is_bad = match_result["result"] == "NO MATCH"
 
     # KYC Decision Logic:
-    # APPROVED = real face + face matches document
-    # REJECTED = deepfake detected OR no face match
-    # REVIEW = suspicious face OR possible match
+    # APPROVED = face matches document (real or deepfake warning)
+    # REJECTED = deepfake detected OR face does not match
+    # REVIEW = possible match
 
-    if face_is_real and match_is_good:
-        overall_result = "APPROVED"
-        alert_level = "LOW RISK"
-        overall_risk = 0.1
-    elif face_is_deepfake:
+    if face_is_deepfake:
+        # Deepfake always rejected regardless of match
         overall_result = "REJECTED"
         alert_level = "CRITICAL"
         overall_risk = 0.95
     elif match_is_bad:
+        # No face match = rejected
         overall_result = "REJECTED"
         alert_level = "HIGH RISK"
-        overall_risk = 0.80
-    elif face_is_deepfake and match_is_bad:
-        overall_result = "REJECTED"
-        alert_level = "CRITICAL"
-        overall_risk = 0.99
-    elif face_is_suspicious and match_is_good:
+        overall_risk = 0.85
+    elif match_is_good and face_is_real:
+        # Perfect — real face + match
+        overall_result = "APPROVED"
+        alert_level = "LOW RISK"
+        overall_risk = 0.05
+    elif match_is_good and face_is_suspicious:
+        # Face matches but suspicious — needs review
         overall_result = "REVIEW"
         alert_level = "MEDIUM RISK"
         overall_risk = 0.45
-    elif face_is_real and match_is_possible:
+    elif match_is_possible and face_is_real:
+        # Real face but uncertain match — review
         overall_result = "REVIEW"
         alert_level = "MEDIUM RISK"
         overall_risk = 0.40
-    elif face_is_suspicious and match_is_possible:
+    elif match_is_possible and face_is_suspicious:
+        # Suspicious face + uncertain match — high risk review
         overall_result = "REVIEW"
         alert_level = "HIGH RISK"
-        overall_risk = 0.60
+        overall_risk = 0.65
     else:
         overall_result = "REVIEW"
         alert_level = "MEDIUM RISK"
