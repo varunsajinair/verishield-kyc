@@ -85,7 +85,6 @@ async def kyc_complete(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid image files")
 
-    # Run face check on selfie + face match
     face_result = predict_face(selfie_image)
     match_result = match_faces(doc_image, selfie_image)
 
@@ -97,41 +96,36 @@ async def kyc_complete(
     match_is_possible = match_result["result"] == "POSSIBLE MATCH"
     match_is_bad = match_result["result"] == "NO MATCH"
 
-    # KYC Decision Logic:
-    # APPROVED = face matches document (real or deepfake warning)
-    # REJECTED = deepfake detected OR face does not match
-    # REVIEW = possible match
+    # KYC LOGIC:
+    # APPROVED = real face + match
+    # REJECTED = no match (face doesn't match document)
+    # REVIEW = deepfake detected OR suspicious OR possible match
 
-    if face_is_deepfake:
-        # Deepfake always rejected regardless of match
-        overall_result = "REJECTED"
-        alert_level = "CRITICAL"
-        overall_risk = 0.95
-    elif match_is_bad:
-        # No face match = rejected
+    if match_is_bad:
+        # Face doesn't match document = REJECTED
         overall_result = "REJECTED"
         alert_level = "HIGH RISK"
         overall_risk = 0.85
-    elif match_is_good and face_is_real:
-        # Perfect — real face + match
+    elif face_is_real and match_is_good:
+        # Perfect verification
         overall_result = "APPROVED"
         alert_level = "LOW RISK"
         overall_risk = 0.05
-    elif match_is_good and face_is_suspicious:
-        # Face matches but suspicious — needs review
+    elif face_is_deepfake:
+        # Deepfake detected — needs human review
+        overall_result = "REVIEW"
+        alert_level = "CRITICAL"
+        overall_risk = 0.90
+    elif face_is_suspicious and match_is_good:
+        # Suspicious face but matches — review
         overall_result = "REVIEW"
         alert_level = "MEDIUM RISK"
         overall_risk = 0.45
-    elif match_is_possible and face_is_real:
-        # Real face but uncertain match — review
+    elif match_is_possible:
+        # Uncertain match — review
         overall_result = "REVIEW"
         alert_level = "MEDIUM RISK"
         overall_risk = 0.40
-    elif match_is_possible and face_is_suspicious:
-        # Suspicious face + uncertain match — high risk review
-        overall_result = "REVIEW"
-        alert_level = "HIGH RISK"
-        overall_risk = 0.65
     else:
         overall_result = "REVIEW"
         alert_level = "MEDIUM RISK"
