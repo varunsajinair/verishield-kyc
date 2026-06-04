@@ -6,7 +6,7 @@ import os
 def get_connection():
     return psycopg2.connect(
         host=st.secrets.get("DB_HOST") or os.getenv('DB_HOST'),
-        port=st.secrets.get("DB_PORT") or os.getenv('DB_PORT', 5432),
+        port=int(st.secrets.get("DB_PORT") or os.getenv('DB_PORT', 6543)),
         dbname=st.secrets.get("DB_NAME") or os.getenv('DB_NAME', 'postgres'),
         user=st.secrets.get("DB_USER") or os.getenv('DB_USER', 'postgres'),
         password=st.secrets.get("DB_PASSWORD") or os.getenv('DB_PASSWORD'),
