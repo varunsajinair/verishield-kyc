@@ -88,48 +88,27 @@ async def kyc_complete(
     face_result = predict_face(selfie_image)
     match_result = match_faces(doc_image, selfie_image)
 
-    face_is_real = face_result["result"] == "AUTHENTIC"
-    face_is_suspicious = face_result["result"] == "SUSPICIOUS"
-    face_is_deepfake = face_result["result"] == "DEEPFAKE"
-
     match_is_good = match_result["result"] == "MATCH"
     match_is_possible = match_result["result"] == "POSSIBLE MATCH"
     match_is_bad = match_result["result"] == "NO MATCH"
 
-    # KYC LOGIC:
-    # APPROVED = real face + match
-    # REJECTED = no match (face doesn't match document)
-    # REVIEW = deepfake detected OR suspicious OR possible match
+    # SIMPLE KYC LOGIC:
+    # APPROVED = faces match
+    # REJECTED = faces don't match
+    # REVIEW = uncertain match
 
-    if match_is_bad:
-        # Face doesn't match document = REJECTED
-        overall_result = "REJECTED"
-        alert_level = "HIGH RISK"
-        overall_risk = 0.85
-    elif face_is_real and match_is_good:
-        # Perfect verification
+    if match_is_good:
         overall_result = "APPROVED"
         alert_level = "LOW RISK"
         overall_risk = 0.05
-    elif face_is_deepfake:
-        # Deepfake detected — needs human review
-        overall_result = "REVIEW"
-        alert_level = "CRITICAL"
-        overall_risk = 0.90
-    elif face_is_suspicious and match_is_good:
-        # Suspicious face but matches — review
-        overall_result = "REVIEW"
-        alert_level = "MEDIUM RISK"
-        overall_risk = 0.45
     elif match_is_possible:
-        # Uncertain match — review
-        overall_result = "REVIEW"
-        alert_level = "MEDIUM RISK"
-        overall_risk = 0.40
-    else:
         overall_result = "REVIEW"
         alert_level = "MEDIUM RISK"
         overall_risk = 0.50
+    else:
+        overall_result = "REJECTED"
+        alert_level = "HIGH RISK"
+        overall_risk = 0.85
 
     processing_time = (time.time() - start_time) * 1000
 
