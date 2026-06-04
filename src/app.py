@@ -10,7 +10,7 @@ import io
 import numpy as np
 from dotenv import load_dotenv
 
-from src.face_model import predict_face
+from src.face_model import predict_face, get_model
 from src.face_match import match_faces
 from src.database import log_verification
 
@@ -28,6 +28,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
+
+@app.on_event("startup")
+async def startup_event():
+    print("🚀 Preloading models...")
+    get_model()
+    print("✅ Models preloaded and ready!")
 
 @app.get("/")
 def root():
