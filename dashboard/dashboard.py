@@ -21,18 +21,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Debug DB connection
-try:
-    from db_utils import get_connection
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM kyc_verifications")
-    count = cursor.fetchone()[0]
-    st.write(f"DEBUG: DB connected! Row count: {count}")
-    cursor.close()
-    conn.close()
-except Exception as e:
-    st.write(f"DEBUG: DB ERROR: {e}")
+
 
 st.markdown("""
 <div style="background:linear-gradient(135deg,#0d1b2e,#1a2744);border-radius:16px;
