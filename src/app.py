@@ -89,22 +89,51 @@ async def kyc_complete(
     face_result = predict_face(selfie_image)
     match_result = match_faces(doc_image, selfie_image)
 
-    # Calculate overall risk
-    risk_scores = [
-        face_result["risk_score"],
-        1.0 - match_result["similarity_score"]
-    ]
-    overall_risk = np.mean(risk_scores)
+    face_is_real = face_result["result"] == "AUTHENTIC"
+    face_is_suspicious = face_result["result"] == "SUSPICIOUS"
+    face_is_deepfake = face_result["result"] == "DEEPFAKE"
 
-    if overall_risk > 0.7:
-        overall_result = "REJECTED"
-        alert_level = "CRITICAL"
-    elif overall_risk > 0.4:
-        overall_result = "REVIEW"
-        alert_level = "HIGH RISK"
-    else:
+    match_is_good = match_result["result"] == "MATCH"
+    match_is_possible = match_result["result"] == "POSSIBLE MATCH"
+    match_is_bad = match_result["result"] == "NO MATCH"
+
+    # KYC Decision Logic:
+    # APPROVED = real face + face matches document
+    # REJECTED = deepfake detected OR no face match
+    # REVIEW = suspicious face OR possible match
+
+    if face_is_real and match_is_good:
         overall_result = "APPROVED"
         alert_level = "LOW RISK"
+        overall_risk = 0.1
+    elif face_is_deepfake:
+        overall_result = "REJECTED"
+        alert_level = "CRITICAL"
+        overall_risk = 0.95
+    elif match_is_bad:
+        overall_result = "REJECTED"
+        alert_level = "HIGH RISK"
+        overall_risk = 0.80
+    elif face_is_deepfake and match_is_bad:
+        overall_result = "REJECTED"
+        alert_level = "CRITICAL"
+        overall_risk = 0.99
+    elif face_is_suspicious and match_is_good:
+        overall_result = "REVIEW"
+        alert_level = "MEDIUM RISK"
+        overall_risk = 0.45
+    elif face_is_real and match_is_possible:
+        overall_result = "REVIEW"
+        alert_level = "MEDIUM RISK"
+        overall_risk = 0.40
+    elif face_is_suspicious and match_is_possible:
+        overall_result = "REVIEW"
+        alert_level = "HIGH RISK"
+        overall_risk = 0.60
+    else:
+        overall_result = "REVIEW"
+        alert_level = "MEDIUM RISK"
+        overall_risk = 0.50
 
     processing_time = (time.time() - start_time) * 1000
 
