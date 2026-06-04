@@ -3,9 +3,10 @@ import random
 from datetime import datetime, timedelta
 from fpdf import FPDF
 import io
+from db_utils import load_all, load_stats
 
 st.set_page_config(
-    page_title="VeriShield — SAR Filing",
+    page_title="VeriShield - SAR Filing",
     page_icon="🏛️",
     layout="wide"
 )
@@ -27,7 +28,7 @@ st.markdown("""
      padding:24px 32px;margin-bottom:24px;border:1px solid #1e3a5f;">
     <h1 style="margin:0;color:white;">🏛️ FinCEN SAR Filing</h1>
     <p style="color:#64748b;margin:4px 0 0 0;">
-    Suspicious Activity Report generator for deepfake KYC fraud — FIN-2024-DEEPFAKEFRAUD compliant
+    Suspicious Activity Report generator for deepfake KYC fraud - FIN-2024-DEEPFAKEFRAUD compliant
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -42,15 +43,13 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Stats
-from db_utils import load_all, load_stats
-df = load_all()
 stats = load_stats()
+df = load_all()
 
 m1, m2, m3, m4 = st.columns(4)
 with m1: st.metric("Total Verifications", stats.get("total", 0))
 with m2: st.metric("Deepfakes Detected", len(df[df['face_result'] == 'DEEPFAKE']) if not df.empty else 0)
-with m3: st.metric("Forged Docs Detected", len(df[df['document_result'] == 'FORGED']) if not df.empty else 0)
+with m3: st.metric("Rejected", stats.get("rejected", 0))
 with m4: st.metric("SARs Required", len(df[df['overall_result'] == 'REJECTED']) if not df.empty else 0)
 
 st.divider()
@@ -59,7 +58,7 @@ tab1, tab2 = st.tabs(["📋 Generate SAR Report", "📚 SAR Reference Guide"])
 
 with tab1:
     st.markdown("### 📋 FinCEN SAR Report Generator")
-    st.markdown("<p style='color:#64748b;'>Generate FIN-2024-DEEPFAKEFRAUD compliant SAR reports for deepfake KYC fraud</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#64748b;'>Generate FIN-2024-DEEPFAKEFRAUD compliant SAR reports</p>", unsafe_allow_html=True)
 
     col1, col2 = st.columns([1, 1])
 
@@ -67,7 +66,7 @@ with tab1:
         st.markdown("#### Institution Details")
         institution = st.text_input("Reporting Institution", value="VeriShield Financial Services")
         branch = st.text_input("Branch/Department", value="Digital Onboarding - KYC Division")
-        officer_name = st.text_input("Compliance Officer Name", value="AI Compliance System v1.0")
+        officer_name = st.text_input("Compliance Officer Name", value="AI Compliance System v2.0")
         officer_title = st.text_input("Officer Title", value="Chief Compliance Officer")
         filing_date = st.date_input("Filing Date", value=datetime.now())
 
@@ -81,28 +80,25 @@ with tab1:
         st.markdown("#### Suspicious Activity Details")
         activity_type = st.selectbox("Primary Activity Type", [
             "Deepfake Identity Fraud",
-            "Document Forgery",
             "Synthetic Identity",
             "Identity Impersonation",
+            "Face Spoofing Attack",
             "Multiple Activity Types"
         ])
-        
+
         detection_method = st.selectbox("Detection Method", [
             "AI Deepfake Detection (EfficientNet-B0)",
-            "Document Forgery Detection",
             "Face Match Failure",
             "Combined AI Analysis"
         ])
 
         deepfake_prob = st.slider("Deepfake Probability", 0.0, 1.0, 0.89)
-        doc_risk = st.slider("Document Risk Score", 0.0, 1.0, 0.75)
         overall_risk = st.slider("Overall Risk Score", 0.0, 1.0, 0.85)
-
         verification_id = st.text_input("Verification ID", value=f"VER-{random.randint(100000,999999)}")
-        
+
         additional_notes = st.text_area(
             "Additional Notes",
-            value="AI system detected high-confidence deepfake manipulation. Face liveness check failed. Document verification inconclusive.",
+            value="AI system detected high-confidence deepfake manipulation. Face liveness check failed.",
             height=100
         )
 
@@ -131,7 +127,7 @@ with tab1:
         pdf.set_fill_color(124, 58, 237)
         pdf.set_text_color(255, 255, 255)
         pdf.set_font('Arial', 'B', 12)
-        pdf.cell(190, 10, f'DEEPFAKE IDENTITY FRAUD DETECTED — {data["activity_type"].upper()}', 0, 1, 'C', True)
+        pdf.cell(190, 10, f'DEEPFAKE IDENTITY FRAUD DETECTED - {data["activity_type"].upper()}', 0, 1, 'C', True)
         pdf.set_text_color(0, 0, 0)
         pdf.ln(5)
 
@@ -186,7 +182,6 @@ with tab1:
             ('Activity Type', data['activity_type']),
             ('Detection Method', data['detection_method']),
             ('Deepfake Probability', f"{data['deepfake_prob']:.0%}"),
-            ('Document Risk Score', f"{data['doc_risk']:.0%}"),
             ('Overall Risk Score', f"{data['overall_risk']:.0%}"),
             ('Verification ID', data['verification_id']),
             ('FinCEN Keyword', 'FIN-2024-DEEPFAKEFRAUD'),
@@ -226,9 +221,12 @@ with tab1:
         pdf.set_xy(10, 272)
         pdf.cell(190, 6, 'VeriShield AI | FIN-2024-DEEPFAKEFRAUD Compliant SAR Report', 0, 1, 'C')
         pdf.set_xy(10, 280)
-        pdf.cell(190, 6, f'SAR ID: {data["sar_id"]} | This document is CONFIDENTIAL and intended for regulatory use only', 0, 1, 'C')
+        pdf.cell(190, 6, f'SAR ID: {data["sar_id"]} | CONFIDENTIAL', 0, 1, 'C')
 
-        return pdf.output(dest='S').encode('latin-1')
+        output = pdf.output(dest='S')
+        if isinstance(output, str):
+            return output.encode('latin-1')
+        return bytes(output)
 
     if st.button("🏛️ Generate FinCEN SAR Report", type="primary", use_container_width=True):
         sar_data = {
@@ -245,7 +243,6 @@ with tab1:
             'activity_type': activity_type,
             'detection_method': detection_method,
             'deepfake_prob': deepfake_prob,
-            'doc_risk': doc_risk,
             'overall_risk': overall_risk,
             'verification_id': verification_id,
             'additional_notes': additional_notes
@@ -260,8 +257,8 @@ with tab1:
                 🏛️ SAR REPORT GENERATED
             </p>
             <p style="color:#64748b;margin:8px 0 0 0;">
-                SAR ID: {sar_data['sar_id']} | 
-                Deepfake Prob: {deepfake_prob:.0%} | 
+                SAR ID: {sar_data['sar_id']} |
+                Deepfake Prob: {deepfake_prob:.0%} |
                 Overall Risk: {overall_risk:.0%}
             </p>
             <p style="color:#94a3b8;font-size:12px;margin:4px 0 0 0;">
@@ -285,11 +282,11 @@ with tab2:
     <div style="background:#0f172a;border:1px solid #7c3aed;border-radius:12px;padding:20px;margin-bottom:12px;">
         <p style="color:#7c3aed;font-weight:bold;font-size:16px;margin:0 0 8px 0;">🏛️ FinCEN Alert FIN-2024-DEEPFAKEFRAUD</p>
         <p style="color:#94a3b8;font-size:13px;margin:0 0 8px 0;">
-        Issued by the Financial Crimes Enforcement Network (FinCEN) requiring all financial institutions 
+        Issued by the Financial Crimes Enforcement Network requiring all financial institutions
         to identify and report deepfake-related fraud in KYC processes.
         </p>
         <p style="color:#cbd5e1;font-size:12px;margin:0;">
-        <b>Key Requirements:</b> Use keyword "FIN-2024-DEEPFAKEFRAUD" in SAR filings | 
+        <b>Key Requirements:</b> Use keyword "FIN-2024-DEEPFAKEFRAUD" in SAR filings |
         File within 30 days of detection | Preserve all AI detection evidence
         </p>
     </div>
@@ -297,10 +294,9 @@ with tab2:
 
     red_flags = [
         ("🤖 Deepfake Face", "AI-generated or manipulated face detected during liveness check"),
-        ("📄 Document Forgery", "Identity document shows signs of digital manipulation"),
-        ("🔍 Face Mismatch", "Face on ID document doesn't match submitted selfie"),
+        ("🔍 Face Mismatch", "Face on ID document does not match submitted selfie"),
         ("⚡ Technical Issues", "Customer reports repeated technical problems during verification"),
-        ("🌍 Geographic Mismatch", "Device location doesn't match document's issuing country"),
+        ("🌍 Geographic Mismatch", "Device location does not match document issuing country"),
         ("🔄 Multiple Attempts", "Same identity submitted multiple times with variations"),
     ]
 
@@ -318,10 +314,9 @@ st.divider()
 st.markdown("""
 <div style="background:#0f172a;border:1px solid #7c3aed;border-radius:8px;padding:16px;">
     <p style="color:#64748b;margin:0;font-size:13px;">
-    💡 <b style="color:white;">Why SAR Filing Matters:</b> FinCEN's FIN-2024-DEEPFAKEFRAUD alert 
-    mandates banks to file SARs when deepfakes are detected in KYC. Fines for non-compliance 
-    reach $1M per violation. VeriShield automates SAR generation — reducing compliance 
-    costs and ensuring regulatory adherence.
+    💡 <b style="color:white;">Why SAR Filing Matters:</b> FinCEN FIN-2024-DEEPFAKEFRAUD mandates 
+    banks to file SARs when deepfakes are detected in KYC. Fines for non-compliance reach $1M per 
+    violation. VeriShield automates SAR generation reducing compliance costs significantly.
     </p>
 </div>
 """, unsafe_allow_html=True)
