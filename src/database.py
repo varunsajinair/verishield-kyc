@@ -1,7 +1,6 @@
 import psycopg2
 import os
 from dotenv import load_dotenv
-from datetime import datetime
 
 load_dotenv()
 
@@ -26,21 +25,22 @@ def log_verification(data: dict):
                 overall_result, overall_risk_score, alert_level, processing_time_ms
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
-            data['verification_id'],
-            data['document_result'],
-            data['document_confidence'],
-            data['face_result'],
-            data['face_confidence'],
-            data['match_result'],
-            data['match_score'],
-            data['overall_result'],
-            data['overall_risk_score'],
-            data['alert_level'],
-            data['processing_time_ms']
+            data.get('verification_id', 'UNKNOWN'),
+            data.get('document_result', 'N/A'),
+            float(data.get('document_confidence', 0.0)),
+            data.get('face_result', 'UNKNOWN'),
+            float(data.get('face_confidence', 0.0)),
+            data.get('match_result', 'UNKNOWN'),
+            float(data.get('match_score', 0.0)),
+            data.get('overall_result', 'UNKNOWN'),
+            float(data.get('overall_risk_score', 0.0)),
+            data.get('alert_level', 'UNKNOWN'),
+            float(data.get('processing_time_ms', 0.0))
         ))
         conn.commit()
         cursor.close()
         conn.close()
+        print(f"✅ Logged verification: {data.get('verification_id')}")
     except Exception as e:
         print(f"DB error: {e}")
 
@@ -49,7 +49,7 @@ def load_all_verifications():
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT * FROM kyc_verifications 
+            SELECT * FROM kyc_verifications
             ORDER BY timestamp DESC
         """)
         rows = cursor.fetchall()
@@ -66,8 +66,8 @@ def load_recent_verifications(limit=50):
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT * FROM kyc_verifications 
-            ORDER BY timestamp DESC 
+            SELECT * FROM kyc_verifications
+            ORDER BY timestamp DESC
             LIMIT %s
         """, (limit,))
         rows = cursor.fetchall()
