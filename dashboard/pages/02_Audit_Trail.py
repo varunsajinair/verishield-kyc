@@ -5,7 +5,7 @@ from db_utils import load_all, load_stats
 
 st.set_page_config(
     page_title="VeriShield — Audit Trail",
-    page_icon="📋",
+    page_icon="🛡️",
     layout="wide"
 )
 
@@ -24,61 +24,49 @@ st.markdown("""
 st.markdown("""
 <div style="background:linear-gradient(135deg,#0d1b2e,#1a2744);border-radius:16px;
      padding:24px 32px;margin-bottom:24px;border:1px solid #1e3a5f;">
-    <h1 style="margin:0;color:white;">📋 KYC Audit Trail</h1>
-    <p style="color:#64748b;margin:4px 0 0 0;">
-    Complete audit log of all KYC verifications — stored in PostgreSQL (Supabase)
+    <h1 style="margin:0;color:white;font-size:28px;">Audit Trail</h1>
+    <p style="color:#64748b;margin:6px 0 0 0;font-size:13px;">
+        All KYC verifications logged to PostgreSQL (Supabase)
     </p>
 </div>
 """, unsafe_allow_html=True)
 
-# Stats
 stats = load_stats()
 m1, m2, m3, m4 = st.columns(4)
 with m1: st.metric("Total Verifications", stats.get("total", 0))
-with m2: st.metric("✅ Approved", stats.get("approved", 0))
-with m3: st.metric("❌ Rejected", stats.get("rejected", 0))
-with m4: st.metric("⚠️ Under Review", stats.get("review", 0))
+with m2: st.metric("Approved", stats.get("approved", 0))
+with m3: st.metric("Rejected", stats.get("rejected", 0))
+with m4: st.metric("Under Review", stats.get("review", 0))
 
 st.divider()
 
-# Filters
-st.markdown("### 🔍 Filter Verifications")
-col1, col2, col3 = st.columns(3)
+st.markdown("### Filter")
+col1, col2 = st.columns(2)
 with col1:
     result_filter = st.selectbox("Overall Result", ["All", "APPROVED", "REJECTED", "REVIEW"])
 with col2:
-    doc_filter = st.selectbox("Document Result", ["All", "AUTHENTIC", "SUSPICIOUS", "FORGED"])
-with col3:
     face_filter = st.selectbox("Face Result", ["All", "AUTHENTIC", "SUSPICIOUS", "DEEPFAKE"])
 
-# Load data
 df = load_all()
 
 if df.empty:
-    st.info("No verifications yet — go to KYC Verification to get started!")
+    st.info("No verifications yet — run one from the KYC Verification page.")
 else:
-    # Apply filters
     if result_filter != "All":
         df = df[df['overall_result'] == result_filter]
-    if doc_filter != "All":
-        df = df[df['document_result'] == doc_filter]
     if face_filter != "All":
         df = df[df['face_result'] == face_filter]
 
-    st.markdown(f"### 📊 Showing {len(df)} Verifications")
+    st.markdown(f"### Showing {len(df)} Verifications")
 
-    # Table
     for _, row in df.iterrows():
         result = row.get('overall_result', 'UNKNOWN')
         color = '#059669' if result == 'APPROVED' else '#dc2626' if result == 'REJECTED' else '#f97316'
         icon = '✅' if result == 'APPROVED' else '❌' if result == 'REJECTED' else '⚠️'
 
-        doc_res = row.get('document_result', 'N/A')
         face_res = row.get('face_result', 'N/A')
         match_res = row.get('match_result', 'N/A')
-        risk = row.get('overall_risk_score', 0)
 
-        doc_color = '#dc2626' if doc_res == 'FORGED' else '#f97316' if doc_res == 'SUSPICIOUS' else '#059669'
         face_color = '#dc2626' if face_res == 'DEEPFAKE' else '#f97316' if face_res == 'SUSPICIOUS' else '#059669'
 
         st.markdown(f"""
@@ -87,10 +75,9 @@ else:
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
                 <span style="color:white;font-weight:bold;">{icon} {row.get('verification_id', 'N/A')}</span>
                 <span style="color:#64748b;font-size:12px;">{str(row.get('timestamp', ''))[:19]}</span>
-                <span style="color:{doc_color};font-size:12px;">📄 Doc: {doc_res} ({row.get('document_confidence', 0):.0%})</span>
-                <span style="color:{face_color};font-size:12px;">🧬 Face: {face_res} ({row.get('face_confidence', 0):.0%})</span>
-                <span style="color:#a78bfa;font-size:12px;">🔍 Match: {match_res} ({row.get('match_score', 0):.0%})</span>
-                <span style="color:#fbbf24;font-size:12px;">⚡ {row.get('processing_time_ms', 0):.0f}ms</span>
+                <span style="color:{face_color};font-size:12px;">Face: {face_res} ({row.get('face_confidence', 0):.0%})</span>
+                <span style="color:#a78bfa;font-size:12px;">Match: {match_res} ({row.get('match_score', 0):.0%})</span>
+                <span style="color:#64748b;font-size:12px;">{row.get('processing_time_ms', 0):.0f}ms</span>
                 <span style="background:{color};color:white;padding:3px 12px;
                              border-radius:12px;font-size:12px;font-weight:bold;">{result}</span>
             </div>
@@ -99,8 +86,7 @@ else:
 
     st.divider()
 
-    # Charts
-    st.markdown("### 📈 Verification Analytics")
+    st.markdown("### Analytics")
 
     col1, col2 = st.columns(2)
 
@@ -113,7 +99,7 @@ else:
             marker=dict(colors=['#059669', '#dc2626', '#f97316'])
         ))
         fig.update_layout(
-            title=dict(text="Overall Results Distribution", font=dict(color='white')),
+            title=dict(text="Results Distribution", font=dict(color='white')),
             paper_bgcolor='#0f172a',
             font=dict(color='white'),
             legend=dict(bgcolor='#0f172a', font=dict(color='white')),
@@ -141,11 +127,10 @@ else:
 
     st.divider()
 
-    # Export
-    st.markdown("### 📥 Export Data")
+    st.markdown("### Export")
     csv = df.to_csv(index=False)
     st.download_button(
-        label="📥 Download CSV",
+        label="Download CSV",
         data=csv,
         file_name="kyc_audit_trail.csv",
         mime="text/csv"
