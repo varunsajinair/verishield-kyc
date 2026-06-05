@@ -4,7 +4,7 @@ import requests
 
 st.set_page_config(
     page_title="VeriShield — Batch Verification",
-    page_icon="📦",
+    page_icon="🛡️",
     layout="wide"
 )
 
@@ -23,20 +23,17 @@ st.markdown("""
 st.markdown("""
 <div style="background:linear-gradient(135deg,#0d1b2e,#1a2744);border-radius:16px;
      padding:24px 32px;margin-bottom:24px;border:1px solid #1e3a5f;">
-    <h1 style="margin:0;color:white;">📦 Batch Deepfake Detection</h1>
-    <p style="color:#64748b;margin:4px 0 0 0;">
-    Upload multiple face photos at once for bulk deepfake screening
+    <h1 style="margin:0;color:white;font-size:28px;">Batch Deepfake Detection</h1>
+    <p style="color:#64748b;margin:6px 0 0 0;font-size:13px;">
+        Upload multiple face photos for bulk deepfake screening
     </p>
 </div>
 """, unsafe_allow_html=True)
 
 API_URL = st.secrets.get("API_URL", "https://verishield-kyc-production.up.railway.app")
 
-st.markdown("### 🧬 Batch Face Deepfake Detection")
-st.markdown("<p style='color:#64748b;'>Upload multiple face photos — system will check each for deepfakes</p>", unsafe_allow_html=True)
-
 uploaded_faces = st.file_uploader(
-    "Upload Multiple Face Photos",
+    "Upload Face Photos",
     type=['jpg', 'jpeg', 'png'],
     accept_multiple_files=True,
     key="batch_faces"
@@ -45,7 +42,7 @@ uploaded_faces = st.file_uploader(
 if uploaded_faces:
     st.markdown(f"**{len(uploaded_faces)} photos uploaded**")
 
-    if st.button("🧬 Run Batch Deepfake Check", type="primary", use_container_width=True):
+    if st.button("Run Batch Deepfake Check", type="primary", use_container_width=True):
         results = []
         progress = st.progress(0)
         status = st.empty()
@@ -79,7 +76,7 @@ if uploaded_faces:
         status.empty()
         progress.empty()
 
-        st.markdown("### 📊 Batch Results")
+        st.markdown("### Results")
 
         authentic = sum(1 for r in results if r['result'] == 'AUTHENTIC')
         deepfakes = sum(1 for r in results if r['result'] == 'DEEPFAKE')
@@ -87,15 +84,15 @@ if uploaded_faces:
 
         c1, c2, c3, c4 = st.columns(4)
         with c1: st.metric("Total Processed", len(results))
-        with c2: st.metric("✅ Authentic", authentic)
-        with c3: st.metric("🤖 Deepfakes", deepfakes)
-        with c4: st.metric("⚠️ Suspicious", suspicious)
+        with c2: st.metric("Authentic", authentic)
+        with c3: st.metric("Deepfakes", deepfakes)
+        with c4: st.metric("Suspicious", suspicious)
 
         st.divider()
 
         for r in results:
             color = '#059669' if r['result'] == 'AUTHENTIC' else '#dc2626' if r['result'] == 'DEEPFAKE' else '#f97316'
-            icon = '✅' if r['result'] == 'AUTHENTIC' else '🤖' if r['result'] == 'DEEPFAKE' else '⚠️'
+            icon = '✅' if r['result'] == 'AUTHENTIC' else '❌' if r['result'] == 'DEEPFAKE' else '⚠️'
 
             st.markdown(f"""
             <div style="background:#0f172a;border:1px solid {color};border-radius:8px;
@@ -103,7 +100,7 @@ if uploaded_faces:
                 <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
                     <span style="color:white;font-weight:bold;">{icon} {r['filename']}</span>
                     <span style="color:{color};font-weight:bold;">{r['result']}</span>
-                    <span style="color:#cbd5e1;font-size:12px;">Deepfake: {r['deepfake_probability']}</span>
+                    <span style="color:#cbd5e1;font-size:12px;">Deepfake prob: {r['deepfake_probability']}</span>
                     <span style="color:#cbd5e1;font-size:12px;">Liveness: {r['liveness_score']}</span>
                     <span style="color:#f97316;font-size:12px;">{r['alert_level']}</span>
                     <span style="color:#64748b;font-size:12px;">{r['processing_ms']}</span>
@@ -114,19 +111,8 @@ if uploaded_faces:
         df_results = pd.DataFrame(results)
         csv = df_results.to_csv(index=False)
         st.download_button(
-            "📥 Download Results CSV",
+            "Download Results CSV",
             data=csv,
             file_name="batch_deepfake_results.csv",
             mime="text/csv"
         )
-
-st.divider()
-st.markdown("""
-<div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;padding:16px;">
-    <p style="color:#64748b;margin:0;font-size:13px;">
-    💡 <b style="color:#cbd5e1;">Batch Processing:</b> Banks screen thousands of selfies daily during 
-    KYC onboarding. VeriShield's batch mode allows compliance teams to screen multiple faces 
-    simultaneously with results exportable to CSV for regulatory reporting.
-    </p>
-</div>
-""", unsafe_allow_html=True)
