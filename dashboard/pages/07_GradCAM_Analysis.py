@@ -9,7 +9,7 @@ import os
 
 st.set_page_config(
     page_title="VeriShield — GradCAM Analysis",
-    page_icon="🔬",
+    page_icon="🛡️",
     layout="wide"
 )
 
@@ -28,19 +28,20 @@ st.markdown("""
 st.markdown("""
 <div style="background:linear-gradient(135deg,#0d1b2e,#1a2744);border-radius:16px;
      padding:24px 32px;margin-bottom:24px;border:1px solid #1e3a5f;">
-    <h1 style="margin:0;color:white;">🔬 GradCAM Deepfake Analysis</h1>
-    <p style="color:#64748b;margin:4px 0 0 0;">
-    Visual explanation of WHERE the AI detected deepfake artifacts — red regions indicate suspicious areas
+    <h1 style="margin:0;color:white;font-size:28px;">GradCAM Analysis</h1>
+    <p style="color:#64748b;margin:6px 0 0 0;font-size:13px;">
+        Visualize which facial regions the model focused on when making its deepfake decision
     </p>
 </div>
 """, unsafe_allow_html=True)
 
 st.markdown("""
 <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
-    <p style="color:#64748b;margin:0;font-size:13px;">
-    💡 <b style="color:#cbd5e1;">What is GradCAM?</b> Gradient-weighted Class Activation Mapping shows 
-    WHICH pixels the AI model focused on when making its deepfake decision. Red = high suspicion, 
-    Blue = low suspicion. This makes AI decisions explainable — required by GDPR Article 22.
+    <p style="color:#64748b;margin:0;font-size:13px;line-height:1.7;">
+        <b style="color:#cbd5e1;">How it works:</b> GradCAM (Gradient-weighted Class Activation Mapping) 
+        backpropagates gradients to the last convolutional layer of EfficientNet-B0 and uses them to 
+        weight the feature maps. Red regions = where the model assigned high deepfake probability. 
+        Useful for manually reviewing borderline cases.
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -111,16 +112,15 @@ transform = transforms.Compose([
     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
 ])
 
-st.markdown("### 🧬 Face Deepfake GradCAM Analysis")
-st.markdown("<p style='color:#64748b;'>Upload a face photo to see exactly WHERE the AI detected deepfake artifacts</p>", unsafe_allow_html=True)
+st.markdown("#### Upload a face photo")
 
 face_file = st.file_uploader("Upload Face Photo", type=['jpg', 'jpeg', 'png'], key="gradcam_face")
 
 if face_file:
     image = Image.open(face_file).convert("RGB")
 
-    if st.button("🔬 Analyze with GradCAM", type="primary", use_container_width=True):
-        with st.spinner("Generating GradCAM visualization..."):
+    if st.button("Run GradCAM", type="primary", use_container_width=True):
+        with st.spinner("Generating heatmap..."):
             try:
                 model = load_face_model()
                 tensor = transform(image).unsqueeze(0)
@@ -133,14 +133,15 @@ if face_file:
                 real_prob = float(probs[1])
 
                 color = '#dc2626' if fake_prob > 0.5 else '#059669'
-                result_text = '🤖 DEEPFAKE DETECTED' if fake_prob > 0.5 else '✅ AUTHENTIC FACE'
+                result_text = 'DEEPFAKE DETECTED' if fake_prob > 0.5 else 'AUTHENTIC'
+                icon = '❌' if fake_prob > 0.5 else '✅'
 
                 st.markdown(f"""
                 <div style="background:#0f172a;border:2px solid {color};border-radius:12px;
                             padding:16px;text-align:center;margin-bottom:16px;">
-                    <p style="color:{color};font-size:22px;font-weight:bold;margin:0;">{result_text}</p>
-                    <p style="color:#64748b;margin:4px 0 0 0;">
-                        Deepfake Probability: {fake_prob:.2%} | Authentic: {real_prob:.2%}
+                    <p style="color:{color};font-size:22px;font-weight:bold;margin:0;">{icon} {result_text}</p>
+                    <p style="color:#64748b;margin:4px 0 0 0;font-size:13px;">
+                        Deepfake: {fake_prob:.2%} &nbsp;|&nbsp; Authentic: {real_prob:.2%}
                     </p>
                 </div>
                 """, unsafe_allow_html=True)
@@ -148,18 +149,18 @@ if face_file:
                 c1, c2, c3 = st.columns(3)
 
                 with c1:
-                    st.markdown("**Original Image**")
+                    st.markdown("**Original**")
                     st.image(image.resize((224, 224)), use_container_width=True)
 
                 with c2:
                     st.markdown("**GradCAM Heatmap**")
                     st.image(heatmap, use_container_width=True)
-                    st.caption("🔴 Red = High suspicion | 🔵 Blue = Low suspicion")
+                    st.caption("Red = high activation, Blue = low activation")
 
                 with c3:
                     st.markdown("**Overlay**")
                     st.image(overlay, use_container_width=True)
-                    st.caption("Shows WHERE AI detected deepfake artifacts")
+                    st.caption("Heatmap overlaid on original face")
 
                 st.divider()
                 m1, m2 = st.columns(2)
@@ -168,14 +169,3 @@ if face_file:
 
             except Exception as e:
                 st.error(f"GradCAM error: {e}")
-
-st.divider()
-st.markdown("""
-<div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;padding:16px;">
-    <p style="color:#64748b;margin:0;font-size:13px;">
-    💡 <b style="color:#cbd5e1;">Why GradCAM matters:</b> GDPR Article 22 requires financial institutions 
-    to explain automated decisions. GradCAM makes AI decisions transparent — compliance officers can 
-    see exactly WHY a face was flagged as deepfake, not just that it was flagged.
-    </p>
-</div>
-""", unsafe_allow_html=True)
