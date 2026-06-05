@@ -4,7 +4,7 @@ import numpy as np
 
 st.set_page_config(
     page_title="VeriShield — Model Performance",
-    page_icon="🧠",
+    page_icon="🛡️",
     layout="wide"
 )
 
@@ -23,17 +23,16 @@ st.markdown("""
 st.markdown("""
 <div style="background:linear-gradient(135deg,#0d1b2e,#1a2744);border-radius:16px;
      padding:24px 32px;margin-bottom:24px;border:1px solid #1e3a5f;">
-    <h1 style="margin:0;color:white;">🧠 Model Performance</h1>
-    <p style="color:#64748b;margin:4px 0 0 0;">
-    EfficientNet-B0 deepfake detector vs baselines — trained on 140K real/fake faces
+    <h1 style="margin:0;color:white;font-size:28px;">Model Performance</h1>
+    <p style="color:#64748b;margin:6px 0 0 0;font-size:13px;">
+        EfficientNet-B0 deepfake detector vs baselines — trained on 140K real/fake faces
     </p>
 </div>
 """, unsafe_allow_html=True)
 
-# Model metrics
 models = {
     'EfficientNet-B0 (VeriShield)': {
-        'accuracy': 98.65,
+        'accuracy': 99.28,
         'precision': 97.8,
         'recall': 98.2,
         'f1': 98.0,
@@ -82,8 +81,7 @@ models = {
     }
 }
 
-# Summary cards
-st.markdown("### 🏆 Performance Summary")
+st.markdown("### Performance Summary")
 c1, c2, c3, c4 = st.columns(4)
 metrics_show = [('accuracy', 'Accuracy'), ('f1', 'F1 Score'), ('auc_roc', 'AUC-ROC'), ('recall', 'Recall')]
 
@@ -91,8 +89,8 @@ for col, (metric, label) in zip([c1, c2, c3, c4], metrics_show):
     best = max(models.items(), key=lambda x: x[1][metric])
     col.markdown(f"""
     <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:12px;padding:16px;text-align:center;">
-        <p style="color:#64748b;margin:0;font-size:11px;text-transform:uppercase;">{label} Winner</p>
-        <p style="color:{best[1]['color']};font-weight:bold;font-size:16px;margin:8px 0 4px 0;">
+        <p style="color:#64748b;margin:0;font-size:11px;text-transform:uppercase;">{label} — Best</p>
+        <p style="color:{best[1]['color']};font-weight:bold;font-size:15px;margin:8px 0 4px 0;">
             {best[0].split()[0]}
         </p>
         <p style="color:white;font-size:22px;font-weight:bold;margin:0;">{best[1][metric]:.1f}%</p>
@@ -101,8 +99,7 @@ for col, (metric, label) in zip([c1, c2, c3, c4], metrics_show):
 
 st.divider()
 
-# Radar chart
-st.markdown("### 📡 Multi-Metric Radar Comparison")
+st.markdown("### Radar Comparison")
 
 categories = ['Accuracy', 'Precision', 'Recall', 'F1 Score', 'AUC-ROC']
 color_alpha = {
@@ -142,8 +139,7 @@ st.plotly_chart(fig_radar, use_container_width=True)
 
 st.divider()
 
-# Bar chart
-st.markdown("### 📊 Side-by-Side Comparison")
+st.markdown("### Side-by-Side Comparison")
 metric_choice = st.selectbox(
     "Select metric",
     ['accuracy', 'precision', 'recall', 'f1', 'auc_roc'],
@@ -176,11 +172,10 @@ st.plotly_chart(fig_bar, use_container_width=True)
 
 st.divider()
 
-# Speed vs Accuracy
 col1, col2 = st.columns(2)
 
 with col1:
-    st.markdown("### ⚡ Speed vs Accuracy")
+    st.markdown("### Speed vs Accuracy")
     fig_scatter = go.Figure()
     for model_name, data in models.items():
         fig_scatter.add_trace(go.Scatter(
@@ -203,7 +198,7 @@ with col1:
     st.plotly_chart(fig_scatter, use_container_width=True)
 
 with col2:
-    st.markdown("### 🕐 Training Time")
+    st.markdown("### Training Time")
     fig_time = go.Figure(go.Bar(
         x=[models[m]['training_time'] for m in model_names],
         y=model_names,
@@ -224,39 +219,35 @@ with col2:
 
 st.divider()
 
-# Model cards
-st.markdown("### 🃏 Model Cards")
+st.markdown("### Model Cards")
 for model_name, data in models.items():
-    is_deployed = data['deployed']
-    border = data['color'] if is_deployed else '#1e3a5f'
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        if is_deployed:
-            st.success("⭐ DEPLOYED")
-        st.markdown(f"### {model_name.split()[0]}")
+        if data['deployed']:
+            st.success("DEPLOYED")
+        st.markdown(f"**{model_name.split()[0]}**")
         st.caption(f"Dataset: {data['dataset']}")
     with c2:
-        st.markdown("**📊 Metrics**")
+        st.markdown("**Metrics**")
         st.markdown(f"Accuracy: **{data['accuracy']}%**")
         st.markdown(f"F1 Score: **{data['f1']}%**")
         st.markdown(f"AUC-ROC: **{data['auc_roc']}%**")
     with c3:
-        st.markdown("**⚡ Speed**")
+        st.markdown("**Speed**")
         st.markdown(f"Inference: **{data['inference_ms']}ms**")
         st.markdown(f"Training: **{data['training_time']}min**")
     with c4:
-        st.markdown("**📈 Status**")
-        status = "🟢 In Production" if is_deployed else "⚪ Baseline"
-        st.markdown(f"Status: **{status}**")
+        st.markdown("**Status**")
+        status = "In Production" if data['deployed'] else "Baseline"
+        st.markdown(f"**{status}**")
     st.divider()
 
 st.markdown("""
-<div style="background:#0f172a;border:1px solid #185FA5;border-radius:8px;padding:16px;">
-    <p style="color:#cbd5e1;margin:0;font-size:13px;">
-    💡 <b style="color:white;">Why EfficientNet-B0?</b> EfficientNet-B0 achieves the best balance of 
-    accuracy and inference speed for real-time KYC verification. Trained on 140K real and AI-generated 
-    faces from the IEEE dataset, it achieves 98.65% accuracy with sub-second inference — 
-    critical for bank onboarding flows that need instant decisions.
+<div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;padding:16px;">
+    <p style="color:#94a3b8;margin:0;font-size:13px;line-height:1.7;">
+        <b style="color:white;">Why EfficientNet-B0?</b> Tested B4 as well — marginal accuracy gain (~0.4%) 
+        but ~3x slower inference, not worth it for a real-time verification flow. MobileNet-V2 was fast 
+        but accuracy dropped too much on borderline cases. B0 hit the right tradeoff.
     </p>
 </div>
 """, unsafe_allow_html=True)
