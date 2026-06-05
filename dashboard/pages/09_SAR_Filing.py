@@ -104,7 +104,7 @@ with tab1:
         pdf.cell(190, 10, 'SUSPICIOUS ACTIVITY REPORT (SAR)', 0, 1, 'C')
         pdf.set_font('Arial', 'B', 11)
         pdf.set_xy(10, 20)
-        pdf.cell(190, 8, 'Deepfake Identity Fraud — KYC Verification', 0, 1, 'C')
+        pdf.cell(190, 8, 'Deepfake Identity Fraud - KYC Verification', 0, 1, 'C')
         pdf.set_font('Arial', '', 9)
         pdf.set_xy(10, 30)
         pdf.cell(190, 8, f"SAR ID: {data['sar_id']} | Filed: {data['filing_date']} | CONFIDENTIAL", 0, 1, 'C')
