@@ -4,7 +4,7 @@ import pandas as pd
 from db_utils import load_stats, load_recent
 
 st.set_page_config(
-    page_title="VeriShield AI — KYC Platform",
+    page_title="VeriShield AI",
     page_icon="🛡️",
     layout="wide"
 )
@@ -21,17 +21,15 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
-
 st.markdown("""
 <div style="background:linear-gradient(135deg,#0d1b2e,#1a2744);border-radius:16px;
      padding:32px;margin-bottom:24px;border:1px solid #1e3a5f;">
     <h1 style="margin:0;color:white;font-size:32px;">🛡️ VeriShield AI</h1>
-    <p style="color:#64748b;margin:8px 0 0 0;font-size:16px;">
-    KYC Deepfake Identity Detection Platform
+    <p style="color:#94a3b8;margin:8px 0 0 0;font-size:15px;">
+        KYC Deepfake Identity Detection
     </p>
-    <p style="color:#334155;margin:4px 0 0 0;font-size:13px;">
-    Powered by EfficientNet-B0 (99.28% Accuracy) | PostgreSQL Audit Trail
+    <p style="color:#475569;margin:6px 0 0 0;font-size:12px;">
+        EfficientNet-B0 &nbsp;·&nbsp; 140K face dataset &nbsp;·&nbsp; PostgreSQL audit log
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -55,49 +53,53 @@ with m5: st.metric("Under Review", stats.get("review", 0))
 
 st.divider()
 
-st.markdown("### 🚀 Platform Features")
+st.markdown("### What this does")
 
 c1, c2, c3, c4 = st.columns(4)
 
 with c1:
     st.markdown("""
-    <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:12px;padding:20px;text-align:center;">
-        <p style="font-size:32px;margin:0;">🧬</p>
-        <p style="color:white;font-weight:bold;margin:8px 0 4px 0;">Deepfake Detection</p>
-        <p style="color:#64748b;font-size:12px;margin:0;">EfficientNet-B0 trained on 140K real/fake faces — 99.28% accuracy</p>
+    <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:12px;padding:20px;">
+        <p style="color:white;font-weight:600;margin:0 0 6px 0;font-size:14px;">Deepfake Detection</p>
+        <p style="color:#64748b;font-size:12px;margin:0;line-height:1.6;">
+            EfficientNet-B0 trained on 140K real/fake faces. Flags synthetic faces at inference.
+        </p>
     </div>
     """, unsafe_allow_html=True)
 
 with c2:
     st.markdown("""
-    <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:12px;padding:20px;text-align:center;">
-        <p style="font-size:32px;margin:0;">🔍</p>
-        <p style="color:white;font-weight:bold;margin:8px 0 4px 0;">Face Matching</p>
-        <p style="color:#64748b;font-size:12px;margin:0;">ID photo vs selfie similarity scoring</p>
+    <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:12px;padding:20px;">
+        <p style="color:white;font-weight:600;margin:0 0 6px 0;font-size:14px;">Face Matching</p>
+        <p style="color:#64748b;font-size:12px;margin:0;line-height:1.6;">
+            Compares ID photo against live selfie using cosine similarity on face embeddings.
+        </p>
     </div>
     """, unsafe_allow_html=True)
 
 with c3:
     st.markdown("""
-    <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:12px;padding:20px;text-align:center;">
-        <p style="font-size:32px;margin:0;">🔬</p>
-        <p style="color:white;font-weight:bold;margin:8px 0 4px 0;">GradCAM Analysis</p>
-        <p style="color:#64748b;font-size:12px;margin:0;">Visual explanation of WHERE deepfake artifacts detected</p>
+    <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:12px;padding:20px;">
+        <p style="color:white;font-weight:600;margin:0 0 6px 0;font-size:14px;">GradCAM Heatmaps</p>
+        <p style="color:#64748b;font-size:12px;margin:0;line-height:1.6;">
+            Shows which facial regions drove the model's decision — useful for manual review.
+        </p>
     </div>
     """, unsafe_allow_html=True)
 
 with c4:
     st.markdown("""
-    <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:12px;padding:20px;text-align:center;">
-        <p style="font-size:32px;margin:0;">📋</p>
-        <p style="color:white;font-weight:bold;margin:8px 0 4px 0;">Audit Trail</p>
-        <p style="color:#64748b;font-size:12px;margin:0;">Every verification logged in PostgreSQL</p>
+    <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:12px;padding:20px;">
+        <p style="color:white;font-weight:600;margin:0 0 6px 0;font-size:14px;">Audit Trail</p>
+        <p style="color:#64748b;font-size:12px;margin:0;line-height:1.6;">
+            Every verification logged to Supabase PostgreSQL with timestamp and result.
+        </p>
     </div>
     """, unsafe_allow_html=True)
 
 st.divider()
 
-st.markdown("### 📊 Recent Verifications")
+st.markdown("### Recent Verifications")
 
 df = load_recent()
 
@@ -121,17 +123,4 @@ if not df.empty:
         </div>
         """, unsafe_allow_html=True)
 else:
-    st.info("No verifications yet — go to KYC Verification to get started!")
-
-st.divider()
-
-st.markdown("""
-<div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;padding:16px;">
-    <p style="color:#64748b;margin:0;font-size:13px;">
-    💡 <b style="color:#cbd5e1;">VeriShield AI</b> — Banks are legally required to perform KYC verification
-    under AML regulations. VeriShield automates deepfake liveness detection and face matching
-    using EfficientNet-B0 trained on 140K real/fake faces with 99.28% accuracy.
-    Compliant with GDPR Article 22 and FinCEN FIN-2024-DEEPFAKEFRAUD.
-    </p>
-</div>
-""", unsafe_allow_html=True)
+    st.info("No verifications yet — run one from the KYC Verification page.")
